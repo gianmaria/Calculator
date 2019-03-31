@@ -18,7 +18,7 @@ using std::endl;
 
 enum class Token_Type
 {
-    plus, minus, mul, div, pow, mod, fact,
+    plus, minus, mul, div, pow, mod,
     open_parenthesis, close_parenthesis,
     assignment_op, constant, variable, function, number, comma,
     end_of_tokens,
@@ -35,7 +35,6 @@ std::string token_type_to_str(Token_Type type)
         case Token_Type::div: return "div";
         case Token_Type::pow: return "pow";
         case Token_Type::mod: return "mod";
-        case Token_Type::fact: return "fact";
         case Token_Type::open_parenthesis: return "open_parenthesis";
         case Token_Type::close_parenthesis: return "close_parenthesis";
         case Token_Type::assignment_op: return "=";
@@ -76,8 +75,7 @@ struct Token
                     type == Token_Type::mul   ||
                     type == Token_Type::div   ||
                     type == Token_Type::pow   ||
-                    type == Token_Type::mod   ||
-                    type == Token_Type::fact);
+                    type == Token_Type::mod);
 
         return res;
     }
@@ -270,13 +268,6 @@ Tokenizer tokenize(const std::string &input)
                 }
             } continue;
 
-            case '!':
-            {
-                token.type = Token_Type::fact;
-                token.text = "!";
-                token.precedence = 5;
-            } break;
-
             case '^':
             {
                 token.type = Token_Type::pow;
@@ -347,6 +338,12 @@ Tokenizer tokenize(const std::string &input)
             {
                 token.type = Token_Type::comma;
                 token.text = ",";
+            } break;
+
+            case '!':
+            {
+                token.type = Token_Type::function;
+                token.text = "!";
             } break;
 
             default:
@@ -574,52 +571,84 @@ float rpn_evaluaton(std::queue<Token> &queue)
     {
         Token &token = queue.front();
 
-        if (token.is_operator())
-        {
-            Token a = stack.top();
-            stack.pop();
-
-            Token b = stack.top();
-            stack.pop();
-            
+        if (token.is_operator() || 
+            token.type == Token_Type::function)
+        {   
             float tmp = 0;
 
-            switch (token.type)
+            if (token.is_operator()) // @NOTE: operator are always binary
             {
-                case Token_Type::plus:
-                {
-                    tmp = a.num + b.num;
-                } break;
+                Token b = stack.top();
+                stack.pop();
 
-                case Token_Type::minus:
-                {
-                    tmp = a.num - b.num;
-                } break;
+                Token a = stack.top();
+                stack.pop();
 
-                case Token_Type::mul:
+                switch (token.type)
                 {
-                    tmp = a.num * b.num;
-                } break;
-                
-                case Token_Type::div:
-                {
-                    tmp = a.num / b.num;
-                } break;
+                    case Token_Type::plus:
+                    {
+                        tmp = a.num + b.num;
+                    } break;
 
-                case Token_Type::mod:
-                {
-                    tmp = std::fmodf(a.num, b.num);
-                } break;
+                    case Token_Type::minus:
+                    {
+                        tmp = a.num - b.num;
+                    } break;
 
-                case Token_Type::pow:
-                {
-                    tmp = std::powf(a.num, b.num);
-                } break;
+                    case Token_Type::mul:
+                    {
+                        tmp = a.num * b.num;
+                    } break;
 
-                default:
-                    throw std::runtime_error("Found unexpected token during calculation: '" + token.text + "'");
+                    case Token_Type::div:
+                    {
+                        tmp = a.num / b.num;
+                    } break;
+
+                    case Token_Type::mod:
+                    {
+                        tmp = std::fmodf(a.num, b.num);
+                    } break;
+
+                    case Token_Type::pow:
+                    {
+                        tmp = std::powf(a.num, b.num);
+                    } break;
+
+                    default:
+                        throw std::runtime_error("Found unexpected token during calculation: '" + token.text + "'");
+                }
             }
+            else
+            {
+                if (token.text == "sin")
+                {
+                    Token b = stack.top();
+                    stack.pop();
 
+                    tmp = std::sinf(b.num);
+                }
+                else if (token.text == "max")
+                {
+                    Token b = stack.top();
+                    stack.pop();
+
+                    Token a = stack.top();
+                    stack.pop();
+
+                    tmp = fmaxf(a.num, b.num);
+                }
+                else if (token.text == "!")
+                {
+                    Token b = stack.top();
+                    stack.pop();
+
+                    tmp = 120.0f; // @FIX: to fix!!
+                }
+
+            }
+            
             Token new_token;
             new_token.type = Token_Type::number;
             new_token.num = tmp;
@@ -635,6 +664,7 @@ float rpn_evaluaton(std::queue<Token> &queue)
         {
             throw std::runtime_error("Error in the queue, found: '" + token.text + "'");
         }
+
         queue.pop();
     }
 
@@ -664,16 +694,18 @@ int main()
 
     try
     {
-        std::string input = "3 + 4 * 2 / ( 1 - 5 ) ^ 2 ^ 3";
+        std::string input;
         input = "2+(3*(8-4))";
-        input = "sin ( max ( 2, 3 ) / 3 * 3.14 )";
         input = "((15 / (7 - (1 + 1))) * 3) - (2 + (1 + 1))";
-        float res = 0;
-
-        res = parse(input);
+        input = "sin ( max ( 2, 3 ) / 3 * 3.141592 )";
+        input = "3 + 4 * 2 / ( 1 - 5 ) ^ 2 ^ 3";
+        input = "3 + ((4 * 2) / (( 1 - 5 ) ^ (2 ^ 3)))";
+        input = "5!";
+        
+        float res = parse(input);
         
         cout << "> " << input << endl;
-        cout << ": " << res << endl;
+        cout << ": " << std::fixed << res << endl;
 
     } catch (std::runtime_error &e)
     {
