@@ -6,9 +6,12 @@
 #include <stdexcept> // exception
 #include <utility> // move
 #include <functional> // function
+#include <map> // map
+#include <optional> // optional
 
-#include <cmath> // NAN
+#include <cmath> // NAN, sin, cos
 #include <cctype> // isdigit, isalpha
+
 
 using std::cout;
 using std::endl;
@@ -17,14 +20,9 @@ enum class Token_Type
 {
     plus, minus, mul, div, pow, mod, fact,
     open_parenthesis, close_parenthesis,
-    assignment_op, variable, function, number, comma,
+    assignment_op, constant, variable, function, number, comma,
     end_of_tokens,
     unknown
-};
-
-enum class Operator_Assoc
-{
-    L_R, R_L, NONE
 };
 
 std::string token_type_to_str(Token_Type type)
@@ -41,6 +39,7 @@ std::string token_type_to_str(Token_Type type)
         case Token_Type::open_parenthesis: return "open_parenthesis";
         case Token_Type::close_parenthesis: return "close_parenthesis";
         case Token_Type::assignment_op: return "=";
+        case Token_Type::constant: return "constant";
         case Token_Type::variable: return "variable";
         case Token_Type::function: return "function";
         case Token_Type::number: return "number";
@@ -50,6 +49,12 @@ std::string token_type_to_str(Token_Type type)
         default: throw std::runtime_error("Name not computed!");
     }
 }
+
+enum class Operator_Assoc
+{
+    L_R, R_L, NONE
+};
+
 
 struct Token
 {
@@ -62,17 +67,26 @@ struct Token
     unsigned precedence = 0;
     Operator_Assoc assoc = Operator_Assoc::NONE;
 
-    std::function<float(float)> fn;
+    void *fn;
 
     bool is_operator()
     {
-        bool res = (type == Token_Type::plus ||
+        bool res = (type == Token_Type::plus  ||
                     type == Token_Type::minus ||
-                    type == Token_Type::mul ||
-                    type == Token_Type::div ||
-                    type == Token_Type::pow ||
-                    type == Token_Type::mod ||
+                    type == Token_Type::mul   ||
+                    type == Token_Type::div   ||
+                    type == Token_Type::pow   ||
+                    type == Token_Type::mod   ||
                     type == Token_Type::fact);
+
+        return res;
+    }
+
+    bool is_operand()
+    {
+        bool res = (type == Token_Type::number   ||
+                    type == Token_Type::constant ||
+                    type == Token_Type::variable);
 
         return res;
     }
@@ -85,8 +99,6 @@ struct Token
         return res;
     }
 };
-
-
 
 struct Tokenizer
 {
@@ -195,6 +207,43 @@ float read_number(const std::string &input, unsigned &len)
     float num = std::stof(num_to_parse);
 
     return num;
+}
+
+std::string read_until_space(const std::string &input)
+{
+    std::string text;
+
+    for (char c : input)
+    {
+        if (c == ' ') break;
+        text.push_back(c);
+    }
+
+    return text;
+}
+
+std::map<std::string, void*> functions_map = 
+{
+    {"sin", &std::sinf},
+    {"max", &std::fmaxf}
+};
+
+std::map<std::string, float> constants_map = 
+{
+    {"pi", 3.14},
+};
+
+void* is_function(const std::string &text)
+{
+    void *res = nullptr;
+
+    if (auto it = functions_map.find(text); it != functions_map.end())
+    {
+        std::pair<std::string, void*> elem = *it;
+        res = elem.second;
+    }
+
+    return res;
 }
 
 Tokenizer tokenize(const std::string &input)
@@ -313,8 +362,24 @@ Tokenizer tokenize(const std::string &input)
                 }
                 else if (std::isalpha(c))
                 {
-                    // function or variable
-                    throw std::runtime_error("Not yet implemented!");
+                    // function or variable or constant
+                    std::string text = read_until_space(input.substr(pos));
+                    token.text = text;
+
+                    if (void *fn = is_function(text); fn)
+                    {
+                        token.type = Token_Type::function;
+                        token.fn = fn;
+                    }
+                    else if (0 /*is_constant(text)*/)
+                    {
+                        token.type = Token_Type::constant;
+
+                    }
+                    else
+                    {
+                        // it's a variable
+                    }
                 }
                 else
                 {
@@ -373,15 +438,20 @@ void print_output_queue(std::queue<Token> output_queue)
 // https://en.wikipedia.org/wiki/Shunting-yard_algorithm
 std::queue<Token> shunting_yard(Tokenizer &input)
 {
+    bool debug = true;
+
     std::queue<Token> output_queue;
     std::stack<Token> operator_stack;
     
-    Token *current_token = input.current_token();
+    if (debug)
+    {
+        print_input(input);
+        print_operator_stack(operator_stack);
+        print_output_queue(output_queue);
+        cout << endl;
+    }
 
-    print_input(input);
-    print_operator_stack(operator_stack);
-    print_output_queue(output_queue);
-    cout << endl;
+    Token *current_token = input.current_token();
 
     while (current_token->type != Token_Type::end_of_tokens)
     {
@@ -389,7 +459,8 @@ std::queue<Token> shunting_yard(Tokenizer &input)
         {
             output_queue.push(*current_token);
         }
-        else if (current_token->type == Token_Type::function)
+        else if (current_token->type == Token_Type::function ||
+                 current_token->type == Token_Type::open_parenthesis)
         {
             operator_stack.push(*current_token);
         }
@@ -408,24 +479,15 @@ std::queue<Token> shunting_yard(Tokenizer &input)
         }
         else if (current_token->is_operator())
         {
-#if 0
-            while (!operator_stack.empty() &&
-                ((operator_stack.top() == TokenType::function) ||
-                   (operator_stack.top().is_operator() && operator_stack.top().precedence > current_token->precedence) ||
-                   (operator_stack.top().is_operator() && operator_stack.top().precedence == current_token->precedence && operator_stack.top().associativity == OperatorAssociativity::L_R))
-                   &&
-                   (operator_stack.top() != TokenType::open_parenthesis)
-                   )
-            {
-                output_queue.push(operator_stack.top());
-                operator_stack.pop();
-            }
-#endif // 0
             while (!operator_stack.empty())
             {
                 bool cond_1 = operator_stack.top().type == Token_Type::function;
-                bool cond_2 = operator_stack.top().is_operator() && operator_stack.top().precedence > current_token->precedence;
-                bool cond_3 = operator_stack.top().is_operator() && operator_stack.top().precedence == current_token->precedence &&
+
+                bool cond_2 = operator_stack.top().is_operator() && 
+                              operator_stack.top().precedence > current_token->precedence;
+
+                bool cond_3 = operator_stack.top().is_operator() && 
+                              operator_stack.top().precedence == current_token->precedence &&
                               operator_stack.top().assoc == Operator_Assoc::L_R;
 
                 bool cond_4 = operator_stack.top().type != Token_Type::open_parenthesis;
@@ -443,10 +505,6 @@ std::queue<Token> shunting_yard(Tokenizer &input)
                 }
             } 
 
-            operator_stack.push(*current_token);
-        }
-        else if (current_token->type == Token_Type::open_parenthesis)
-        {
             operator_stack.push(*current_token);
         }
         else if (current_token->type == Token_Type::close_parenthesis)
@@ -469,15 +527,19 @@ std::queue<Token> shunting_yard(Tokenizer &input)
         }
         else
         {
-            throw std::runtime_error("Unexpected token: '" + token_type_to_str(current_token->type) + "' " + current_token->text);
+            throw std::runtime_error("Unexpected token: '" + token_type_to_str(current_token->type) + 
+                                     "' name: '" + current_token->text + "'");
         }
 
         current_token = input.next_token();
 
-        print_input(input);
-        print_operator_stack(operator_stack);
-        print_output_queue(output_queue);
-        cout << endl;
+        if (debug)
+        {
+            print_input(input);
+            print_operator_stack(operator_stack);
+            print_output_queue(output_queue);
+            cout << endl;
+        }
     }
 
     while (!operator_stack.empty())
@@ -491,13 +553,99 @@ std::queue<Token> shunting_yard(Tokenizer &input)
             output_queue.push(operator_stack.top());
             operator_stack.pop();
         }
-        print_input(input);
-        print_operator_stack(operator_stack);
-        print_output_queue(output_queue);
-        cout << endl;
+
+        if (debug)
+        {
+            print_input(input);
+            print_operator_stack(operator_stack);
+            print_output_queue(output_queue);
+            cout << endl;
+        }
     }
 
     return output_queue;
+}
+
+float rpn_evaluaton(std::queue<Token> &queue)
+{
+    std::stack<Token> stack;
+
+    while (!queue.empty())
+    {
+        Token &token = queue.front();
+
+        if (token.is_operator())
+        {
+            Token a = stack.top();
+            stack.pop();
+
+            Token b = stack.top();
+            stack.pop();
+            
+            float tmp = 0;
+
+            switch (token.type)
+            {
+                case Token_Type::plus:
+                {
+                    tmp = a.num + b.num;
+                } break;
+
+                case Token_Type::minus:
+                {
+                    tmp = a.num - b.num;
+                } break;
+
+                case Token_Type::mul:
+                {
+                    tmp = a.num * b.num;
+                } break;
+                
+                case Token_Type::div:
+                {
+                    tmp = a.num / b.num;
+                } break;
+
+                case Token_Type::mod:
+                {
+                    tmp = std::fmodf(a.num, b.num);
+                } break;
+
+                case Token_Type::pow:
+                {
+                    tmp = std::powf(a.num, b.num);
+                } break;
+
+                default:
+                    throw std::runtime_error("Found unexpected token during calculation: '" + token.text + "'");
+            }
+
+            Token new_token;
+            new_token.type = Token_Type::number;
+            new_token.num = tmp;
+            new_token.text = std::to_string(tmp); // @NOTE: forse non serve...
+
+            stack.push(std::move(new_token));
+        }
+        else if (token.is_operand())
+        {
+            stack.push(token);
+        }
+        else
+        {
+            throw std::runtime_error("Error in the queue, found: '" + token.text + "'");
+        }
+        queue.pop();
+    }
+
+    if (stack.size() != 1)
+    {
+        throw std::runtime_error("Stack has more than 1 element");
+    }
+
+    Token &last = stack.top();
+    
+    return last.num;
 }
 
 float parse(const std::string &input)
@@ -506,24 +654,27 @@ float parse(const std::string &input)
 
     std::queue<Token> rpn = shunting_yard(infix_notation); // 2) convert tokens to reverse polish notation
 
-#if 0
     float res = rpn_evaluaton(rpn); // 3) solve the reverse polish notation
-#endif
 
-    return 7;
+    return res;
 }
 
 int main()
 {
-    std::string input = "3 + 4 * 2 / ( 1 - 5 ) ^ 2 ^ 3";
-
-    float res = 0;
 
     try
     {
+        std::string input = "3 + 4 * 2 / ( 1 - 5 ) ^ 2 ^ 3";
+        input = "2+(3*(8-4))";
+        input = "sin ( max ( 2, 3 ) / 3 * 3.14 )";
+        input = "((15 / (7 - (1 + 1))) * 3) - (2 + (1 + 1))";
+        float res = 0;
+
         res = parse(input);
+        
         cout << "> " << input << endl;
         cout << ": " << res << endl;
+
     } catch (std::runtime_error &e)
     {
         cout << "[EXCEPTION] " << e.what() << endl;
