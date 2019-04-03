@@ -16,7 +16,13 @@
 using std::cout;
 using std::endl;
 
-#define calc_exception(msg) (std::runtime_error("[EXCEPTION] File:" + std::string(__FILE__) + ":" + std::to_string(__LINE__) + "\n" + "    msg: " + std::string(msg)))
+
+#define calc_exception(msg) ( \
+    std::runtime_error(std::string("[EXCEPTION]") + std::string("\n") + \
+        std::string("File: ") + std::string(__FILE__) + std::string("\n") + \
+        std::string("Function: ") + std::string(__func__) + std::string("():") + std::to_string(__LINE__) + std::string("\n") + \
+        std::string("Msg: ") + std::string(msg)) \
+)
 
 enum class Token_Type
 {
@@ -231,6 +237,7 @@ std::string read_string(const std::string &input)
     for (char c : input)
     {
         if (std::isalpha(c) ||
+            std::isdigit(c) ||
             c == '_')
         {
             text.push_back(c);
@@ -273,10 +280,27 @@ float do_max(std::stack<float>& operands)
     float op_1 = operands.top();
     operands.pop();
 
-    float res = op_1 > op_2 ? op_1 : op_2;
+    float res = std::fmaxf(op_1, op_2);
 
     return res;
 }
+
+float do_max3(std::stack<float>& operands)
+{
+    float op_3 = operands.top();
+    operands.pop();
+    
+    float op_2 = operands.top();
+    operands.pop();
+
+    float op_1 = operands.top();
+    operands.pop();
+
+    float res = std::fmaxf(std::fmaxf(op_1, op_2), op_3);
+
+    return res;
+}
+
 
 float do_fact(std::stack<float>& operands)
 {
@@ -300,6 +324,7 @@ std::map<std::string, token_fn> functions_map =
     {"sin", do_sin},
     {"cos", do_cos},
     {"!", do_fact},
+    {"max3", do_max3},
     {"max", do_max}
 };
 
@@ -537,6 +562,13 @@ void print_output_queue(std::queue<Token> output_queue)
 // https://en.wikipedia.org/wiki/Shunting-yard_algorithm
 std::queue<Token> shunting_yard(Tokenizer &input)
 {
+    /*
+    TODOs:
+    we can merge:
+        else if (current_token->type == Token_Type::comma) and
+        else if (current_token->type == Token_Type::close_parenthesis)
+
+    */
     bool debug = true;
 
     std::queue<Token> output_queue;
@@ -594,7 +626,10 @@ std::queue<Token> shunting_yard(Tokenizer &input)
                 
                 bool cond_1_or_2_or_3 = cond_1 || cond_2 || cond_3;
 
-                if (cond_1_or_2_or_3 && cond_4)
+                // basically we pop from the operator_stack 
+                // if, on top of the stack, there are operations with higher priority,
+                // compared to the current_token, or we are not inside a parenthesis
+                if (cond_1_or_2_or_3 && cond_4) 
                 {
                     output_queue.push(operator_stack.top());
                     operator_stack.pop();
@@ -743,7 +778,7 @@ float rpn_evaluaton(std::queue<Token> &queue)
 
     if (operands.size() != 1)
     {
-        throw calc_exception("Stack has more than 1 element");
+        throw calc_exception("Operand's stack has more than 1 element, something went wrong during the rpn evaluation");
     }
 
     float res = operands.top();
@@ -776,6 +811,8 @@ int main()
         input = "5! +3 + pi";
         input = "pi*2";
         input = "(tau-pi) * 2";
+        input = "max3(7, 4+5, 3)";
+        input = "max3(7, max(4,5+3), 3)";
         
         float res = calc(input);
         
