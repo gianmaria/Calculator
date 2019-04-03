@@ -62,6 +62,7 @@ enum class Operator_Assoc
     L_R, R_L, NONE
 };
 
+using token_fn = std::function<float(std::stack<float>&)>;
 
 struct Token
 {
@@ -74,7 +75,7 @@ struct Token
     unsigned precedence = 0;
     Operator_Assoc assoc = Operator_Assoc::NONE;
 
-    std::function<float(std::stack<Token>&)> fn;
+    token_fn fn;
 
     Token()
     {}
@@ -112,7 +113,6 @@ struct Token
     }
 };
 
-using token_fn = std::function<float(std::stack<Token>&)>;
 
 
 struct Tokenizer
@@ -245,47 +245,47 @@ std::string read_string(const std::string &input)
 }
 
 
-float do_sin(std::stack<Token>& operands)
+float do_sin(std::stack<float>& operands)
 {
-    Token op_1 = operands.top();
+    float op_1 = operands.top();
     operands.pop();
 
-    float res = std::sinf(op_1.num);
+    float res = std::sinf(op_1);
     
     return res;
 }
 
-float do_cos(std::stack<Token>& operands)
+float do_cos(std::stack<float>& operands)
 {
-    Token op_1 = operands.top();
+    float op_1 = operands.top();
     operands.pop();
 
-    float res = std::cosf(op_1.num);
+    float res = std::cosf(op_1);
 
     return res;
 }
 
-float do_max(std::stack<Token>& operands)
+float do_max(std::stack<float>& operands)
 {
-    Token op_2 = operands.top();
+    float op_2 = operands.top();
     operands.pop();
 
-    Token op_1 = operands.top();
+    float op_1 = operands.top();
     operands.pop();
 
-    float res = op_1.num > op_2.num ? op_1.num : op_2.num;
+    float res = op_1 > op_2 ? op_1 : op_2;
 
     return res;
 }
 
-float do_fact(std::stack<Token>& operands)
+float do_fact(std::stack<float>& operands)
 {
     float res = 1;
 
-    Token b = operands.top();
+    float op_1 = operands.top();
     operands.pop();
 
-    for (unsigned n = (unsigned)b.num;
+    for (unsigned n = (unsigned)op_1;
          n > 0;
          --n)
     {
@@ -618,7 +618,7 @@ std::queue<Token> shunting_yard(Tokenizer &input)
 
             if (!operator_stack.empty())
             {
-                operator_stack.pop(); // pop the '('
+                operator_stack.pop(); // pop the remaning '('
             }
             else
             {
@@ -669,7 +669,7 @@ std::queue<Token> shunting_yard(Tokenizer &input)
 
 float rpn_evaluaton(std::queue<Token> &queue)
 {
-    std::stack<Token> stack;
+    std::stack<float> operands;
 
     while (!queue.empty())
     {
@@ -679,68 +679,59 @@ float rpn_evaluaton(std::queue<Token> &queue)
 
         if (token.is_operator()) // @NOTE: operator are always binary
         {
-            Token b = stack.top();
-            stack.pop();
+            float op_2 = operands.top();
+            operands.pop();
 
-            Token a = stack.top();
-            stack.pop();
+            float op_1 = operands.top();
+            operands.pop();
 
             switch (token.type)
             {
                 case Token_Type::plus:
                 {
-                    tmp = a.num + b.num;
+                    tmp = op_1 + op_2;
                 } break;
 
                 case Token_Type::minus:
                 {
-                    tmp = a.num - b.num;
+                    tmp = op_1 - op_2;
                 } break;
 
                 case Token_Type::mul:
                 {
-                    tmp = a.num * b.num;
+                    tmp = op_1 * op_2;
                 } break;
 
                 case Token_Type::div:
                 {
-                    tmp = a.num / b.num;
+                    tmp = op_1 / op_2;
                 } break;
 
                 case Token_Type::mod:
                 {
-                    tmp = std::fmodf(a.num, b.num);
+                    tmp = std::fmodf(op_1, op_2);
                 } break;
 
                 case Token_Type::pow:
                 {
-                    tmp = std::powf(a.num, b.num);
+                    tmp = std::powf(op_1, op_2);
                 } break;
 
                 default:
                     throw calc_exception("Found unexpected token during calculation: '" + token.text + "'");
             }
 
-            Token new_token;
-            new_token.type = Token_Type::number;
-            new_token.num = tmp;
-
-            stack.push(std::move(new_token));
+            operands.push(tmp);
         }
         else if (token.type == Token_Type::function)
         {
-            tmp = token.fn(stack);
-            stack.push(Token{ Token_Type::number, tmp });
-        }
-        else if (token.type == Token_Type::constant)
-        {
-            // no calcolation here
-            tmp = token.num;
-            stack.push(Token{ Token_Type::number, tmp });
+            tmp = token.fn(operands);
+            operands.push(tmp);
         }
         else if (token.is_operand())
         {
-            stack.push(token);
+            tmp = token.num;
+            operands.push(tmp);
         }
         else
         {
@@ -750,14 +741,14 @@ float rpn_evaluaton(std::queue<Token> &queue)
         queue.pop();
     }
 
-    if (stack.size() != 1)
+    if (operands.size() != 1)
     {
         throw calc_exception("Stack has more than 1 element");
     }
 
-    Token &last = stack.top();
+    float res = operands.top();
     
-    return last.num;
+    return res;
 }
 
 float calc(const std::string &input)
