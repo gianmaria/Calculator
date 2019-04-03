@@ -18,7 +18,7 @@ using std::endl;
 
 enum class Token_Type
 {
-    plus, minus, mul, div, pow, mod,
+    plus, minus, mul, div, pow, mod, fact,
     open_parenthesis, close_parenthesis,
     assignment_op, constant, variable, function, number, comma,
     end_of_tokens,
@@ -35,16 +35,22 @@ std::string token_type_to_str(Token_Type type)
         case Token_Type::div: return "div";
         case Token_Type::pow: return "pow";
         case Token_Type::mod: return "mod";
+        case Token_Type::fact: return "factorial";
+
         case Token_Type::open_parenthesis: return "open_parenthesis";
         case Token_Type::close_parenthesis: return "close_parenthesis";
+
         case Token_Type::assignment_op: return "=";
         case Token_Type::constant: return "constant";
         case Token_Type::variable: return "variable";
         case Token_Type::function: return "function";
         case Token_Type::number: return "number";
         case Token_Type::comma: return "comma";
+
         case Token_Type::end_of_tokens: return "end_of_tokens";
+
         case Token_Type::unknown: return "unknown";
+
         default: throw std::runtime_error("Name not computed!");
     }
 }
@@ -58,15 +64,21 @@ enum class Operator_Assoc
 struct Token
 {
     Token_Type type = Token_Type::unknown;
+    std::string text = "";
 
     unsigned col = 1;
 
     float num = NAN;
-    std::string text = "";
     unsigned precedence = 0;
     Operator_Assoc assoc = Operator_Assoc::NONE;
 
-    void *fn;
+    std::function<float(std::stack<Token>&)> fn;
+
+    Token()
+    {}
+    
+    Token(Token_Type type, float num) : type(type), num(num) 
+    {}
 
     bool is_operator()
     {
@@ -97,6 +109,9 @@ struct Token
         return res;
     }
 };
+
+using token_fn = std::function<float(std::stack<Token>&)>;
+
 
 struct Tokenizer
 {
@@ -220,31 +235,71 @@ std::string read_until_space(const std::string &input)
     return text;
 }
 
-std::map<std::string, void*> functions_map = 
+
+float do_sin(std::stack<Token>& tokens)
 {
-    {"sin", &std::sinf},
-    {"max", &std::fmaxf}
+    return 0;
+}
+
+float do_cos(std::stack<Token>& tokens)
+{
+    return 0;
+}
+
+float do_max(std::stack<Token>& tokens)
+{
+    return 0;
+}
+
+float do_fact(std::stack<Token>& tokens)
+{
+    return 0;
+}
+
+std::map<std::string, token_fn> functions_map =
+{
+    {"sin", do_sin},
+    {"cos", do_cos},
+    {"!", do_fact},
+    {"max", do_max}
 };
 
 std::map<std::string, float> constants_map = 
 {
-    {"pi", 3.14},
+    {"pi",  3.141592f},
+    {"tau", 6.283185f}
 };
 
-void* is_function(const std::string &text)
+// add on operator map?
+
+std::optional<token_fn> is_function(const std::string &text)
 {
-    void *res = nullptr;
+    std::optional<token_fn> res;
 
     if (auto it = functions_map.find(text); it != functions_map.end())
     {
-        std::pair<std::string, void*> elem = *it;
-        res = elem.second;
+        std::pair<std::string, token_fn> pair = *it;
+        res = pair.second;
     }
 
     return res;
 }
 
-Tokenizer tokenize(const std::string &input)
+std::optional<float> is_constant(const std::string &text)
+{
+    std::optional<float> res;
+
+    if (auto it = constants_map.find(text); it != constants_map.end())
+    {
+        std::pair<std::string, float> pair = *it;
+        res = pair.second;
+    }
+
+    return res;
+}
+
+
+Tokenizer tokenize_and_lex(const std::string &input)
 {
     Tokenizer res;
     res.input = input;
@@ -344,6 +399,14 @@ Tokenizer tokenize(const std::string &input)
             {
                 token.type = Token_Type::function;
                 token.text = "!";
+                if (auto fn = is_function("!"); fn.has_value())
+                {
+                    token.fn = fn.value();
+                }
+                else
+                {
+                    throw std::runtime_error("! does not have a function associated!");
+                }
             } break;
 
             default:
@@ -363,19 +426,19 @@ Tokenizer tokenize(const std::string &input)
                     std::string text = read_until_space(input.substr(pos));
                     token.text = text;
 
-                    if (void *fn = is_function(text); fn)
+                    if (auto fn = is_function(text); fn.has_value())
                     {
                         token.type = Token_Type::function;
-                        token.fn = fn;
+                        token.fn = fn.value();
                     }
-                    else if (0 /*is_constant(text)*/)
+                    else if (auto cons = is_constant(text); cons.has_value())
                     {
                         token.type = Token_Type::constant;
-
+                        token.num = cons.value();
                     }
                     else
                     {
-                        // it's a variable
+                        // it's a variable // @TODO: handle variables later, maybe?
                     }
                 }
                 else
@@ -563,6 +626,7 @@ std::queue<Token> shunting_yard(Tokenizer &input)
     return output_queue;
 }
 
+
 float rpn_evaluaton(std::queue<Token> &queue)
 {
     std::stack<Token> stack;
@@ -571,90 +635,68 @@ float rpn_evaluaton(std::queue<Token> &queue)
     {
         Token &token = queue.front();
 
-        if (token.is_operator() || 
-            token.type == Token_Type::function)
-        {   
-            float tmp = 0;
+        float tmp = 0;
 
-            if (token.is_operator()) // @NOTE: operator are always binary
+        if (token.is_operator()) // @NOTE: operator are always binary
+        {
+            Token b = stack.top();
+            stack.pop();
+
+            Token a = stack.top();
+            stack.pop();
+
+            switch (token.type)
             {
-                Token b = stack.top();
-                stack.pop();
-
-                Token a = stack.top();
-                stack.pop();
-
-                switch (token.type)
+                case Token_Type::plus:
                 {
-                    case Token_Type::plus:
-                    {
-                        tmp = a.num + b.num;
-                    } break;
+                    tmp = a.num + b.num;
+                } break;
 
-                    case Token_Type::minus:
-                    {
-                        tmp = a.num - b.num;
-                    } break;
+                case Token_Type::minus:
+                {
+                    tmp = a.num - b.num;
+                } break;
 
-                    case Token_Type::mul:
-                    {
-                        tmp = a.num * b.num;
-                    } break;
+                case Token_Type::mul:
+                {
+                    tmp = a.num * b.num;
+                } break;
 
-                    case Token_Type::div:
-                    {
-                        tmp = a.num / b.num;
-                    } break;
+                case Token_Type::div:
+                {
+                    tmp = a.num / b.num;
+                } break;
 
-                    case Token_Type::mod:
-                    {
-                        tmp = std::fmodf(a.num, b.num);
-                    } break;
+                case Token_Type::mod:
+                {
+                    tmp = std::fmodf(a.num, b.num);
+                } break;
 
-                    case Token_Type::pow:
-                    {
-                        tmp = std::powf(a.num, b.num);
-                    } break;
+                case Token_Type::pow:
+                {
+                    tmp = std::powf(a.num, b.num);
+                } break;
 
-                    default:
-                        throw std::runtime_error("Found unexpected token during calculation: '" + token.text + "'");
-                }
+                default:
+                    throw std::runtime_error("Found unexpected token during calculation: '" + token.text + "'");
             }
-            else
-            {
-                if (token.text == "sin")
-                {
-                    Token b = stack.top();
-                    stack.pop();
 
-                    tmp = std::sinf(b.num);
-                }
-                else if (token.text == "max")
-                {
-                    Token b = stack.top();
-                    stack.pop();
-
-                    Token a = stack.top();
-                    stack.pop();
-
-                    tmp = fmaxf(a.num, b.num);
-                }
-                else if (token.text == "!")
-                {
-                    Token b = stack.top();
-                    stack.pop();
-
-                    tmp = 120.0f; // @FIX: to fix!!
-                }
-
-            }
-            
             Token new_token;
             new_token.type = Token_Type::number;
             new_token.num = tmp;
-            new_token.text = std::to_string(tmp); // @NOTE: forse non serve...
 
             stack.push(std::move(new_token));
+        }
+        else if (token.type == Token_Type::function)
+        {
+            tmp = token.fn(stack);
+            stack.push(Token{ Token_Type::number, tmp });
+        }
+        else if (token.type == Token_Type::constant)
+        {
+            // no calcolation here
+            tmp = token.num;
+            stack.push(Token{ Token_Type::number, tmp });
         }
         else if (token.is_operand())
         {
@@ -678,9 +720,9 @@ float rpn_evaluaton(std::queue<Token> &queue)
     return last.num;
 }
 
-float parse(const std::string &input)
+float calc(const std::string &input)
 {
-    Tokenizer infix_notation = tokenize(input); // 1) convert input into tokens
+    Tokenizer infix_notation = tokenize_and_lex(input); // 1) convert input into tokens
 
     std::queue<Token> rpn = shunting_yard(infix_notation); // 2) convert tokens to reverse polish notation
 
@@ -691,7 +733,6 @@ float parse(const std::string &input)
 
 int main()
 {
-
     try
     {
         std::string input;
@@ -702,7 +743,7 @@ int main()
         input = "3 + ((4 * 2) / (( 1 - 5 ) ^ (2 ^ 3)))";
         input = "5!";
         
-        float res = parse(input);
+        float res = calc(input);
         
         cout << "> " << input << endl;
         cout << ": " << std::fixed << res << endl;
