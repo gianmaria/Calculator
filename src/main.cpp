@@ -16,6 +16,8 @@
 using std::cout;
 using std::endl;
 
+#define calc_exception(msg) (std::runtime_error("[EXCEPTION] File:" + std::string(__FILE__) + ":" + std::to_string(__LINE__) + "\n" + "    msg: " + std::string(msg)))
+
 enum class Token_Type
 {
     plus, minus, mul, div, pow, mod, fact,
@@ -51,7 +53,7 @@ std::string token_type_to_str(Token_Type type)
 
         case Token_Type::unknown: return "unknown";
 
-        default: throw std::runtime_error("Name not computed!");
+        default: throw calc_exception("Name not computed!");
     }
 }
 
@@ -125,7 +127,7 @@ struct Tokenizer
     {
         if (old_token_idx != 0)
         {
-            throw std::runtime_error("Only one save at a time!");
+            throw calc_exception("Only one save at a time!");
         }
 
         old_token_idx = current_token_idx;
@@ -198,7 +200,7 @@ struct Tokenizer
             std::string error =
                 "Expected " + token_type_to_str(requested) + " found " + token_type_to_str(token->type) +
                 " Col:" + std::to_string(token->col);
-            throw std::runtime_error(error);
+            throw calc_exception(error);
         }
 
         return token;
@@ -222,38 +224,75 @@ float read_number(const std::string &input, unsigned &len)
     return num;
 }
 
-std::string read_until_space(const std::string &input)
+std::string read_string(const std::string &input)
 {
     std::string text;
 
     for (char c : input)
     {
-        if (c == ' ') break;
-        text.push_back(c);
+        if (std::isalpha(c) ||
+            c == '_')
+        {
+            text.push_back(c);
+        }
+        else
+        {
+            break;
+        }
     }
 
     return text;
 }
 
 
-float do_sin(std::stack<Token>& tokens)
+float do_sin(std::stack<Token>& operands)
 {
-    return 0;
+    Token op_1 = operands.top();
+    operands.pop();
+
+    float res = std::sinf(op_1.num);
+    
+    return res;
 }
 
-float do_cos(std::stack<Token>& tokens)
+float do_cos(std::stack<Token>& operands)
 {
-    return 0;
+    Token op_1 = operands.top();
+    operands.pop();
+
+    float res = std::cosf(op_1.num);
+
+    return res;
 }
 
-float do_max(std::stack<Token>& tokens)
+float do_max(std::stack<Token>& operands)
 {
-    return 0;
+    Token op_2 = operands.top();
+    operands.pop();
+
+    Token op_1 = operands.top();
+    operands.pop();
+
+    float res = op_1.num > op_2.num ? op_1.num : op_2.num;
+
+    return res;
 }
 
-float do_fact(std::stack<Token>& tokens)
+float do_fact(std::stack<Token>& operands)
 {
-    return 0;
+    float res = 1;
+
+    Token b = operands.top();
+    operands.pop();
+
+    for (unsigned n = (unsigned)b.num;
+         n > 0;
+         --n)
+    {
+        res *= (float)n;
+    }
+
+    return res;
 }
 
 std::map<std::string, token_fn> functions_map =
@@ -405,7 +444,7 @@ Tokenizer tokenize_and_lex(const std::string &input)
                 }
                 else
                 {
-                    throw std::runtime_error("! does not have a function associated!");
+                    throw calc_exception("! does not have a function associated!");
                 }
             } break;
 
@@ -423,7 +462,7 @@ Tokenizer tokenize_and_lex(const std::string &input)
                 else if (std::isalpha(c))
                 {
                     // function or variable or constant
-                    std::string text = read_until_space(input.substr(pos));
+                    std::string text = read_string(input.substr(pos));
                     token.text = text;
 
                     if (auto fn = is_function(text); fn.has_value())
@@ -443,7 +482,7 @@ Tokenizer tokenize_and_lex(const std::string &input)
                 }
                 else
                 {
-                    throw std::runtime_error("Unrecognized token: '" + std::string(1, c) + "'");
+                    throw calc_exception("Unrecognized token: '" + std::string(1, c) + "'");
                 }
             }
         }
@@ -515,7 +554,8 @@ std::queue<Token> shunting_yard(Tokenizer &input)
 
     while (current_token->type != Token_Type::end_of_tokens)
     {
-        if (current_token->type == Token_Type::number)
+        if (current_token->type == Token_Type::number || 
+            current_token->type == Token_Type::constant)
         {
             output_queue.push(*current_token);
         }
@@ -534,7 +574,7 @@ std::queue<Token> shunting_yard(Tokenizer &input)
             }
             if (operator_stack.empty())
             {
-                throw std::runtime_error("misplaced separator or mismatched parentheses");
+                throw calc_exception("misplaced separator or mismatched parentheses");
             }
         }
         else if (current_token->is_operator())
@@ -582,12 +622,12 @@ std::queue<Token> shunting_yard(Tokenizer &input)
             }
             else
             {
-                throw std::runtime_error("Mismatched Parentheses!!");
+                throw calc_exception("Mismatched Parentheses!!");
             }
         }
         else
         {
-            throw std::runtime_error("Unexpected token: '" + token_type_to_str(current_token->type) + 
+            throw calc_exception("Unexpected token: '" + token_type_to_str(current_token->type) + 
                                      "' name: '" + current_token->text + "'");
         }
 
@@ -606,7 +646,7 @@ std::queue<Token> shunting_yard(Tokenizer &input)
     {
         if (operator_stack.top().is_parenthesis())
         {
-            throw std::runtime_error("Mismatched Parentheses!!");
+            throw calc_exception("Mismatched Parentheses!!");
         }
         else
         {
@@ -678,7 +718,7 @@ float rpn_evaluaton(std::queue<Token> &queue)
                 } break;
 
                 default:
-                    throw std::runtime_error("Found unexpected token during calculation: '" + token.text + "'");
+                    throw calc_exception("Found unexpected token during calculation: '" + token.text + "'");
             }
 
             Token new_token;
@@ -704,7 +744,7 @@ float rpn_evaluaton(std::queue<Token> &queue)
         }
         else
         {
-            throw std::runtime_error("Error in the queue, found: '" + token.text + "'");
+            throw calc_exception("Error in the queue, found: '" + token.text + "'");
         }
 
         queue.pop();
@@ -712,7 +752,7 @@ float rpn_evaluaton(std::queue<Token> &queue)
 
     if (stack.size() != 1)
     {
-        throw std::runtime_error("Stack has more than 1 element");
+        throw calc_exception("Stack has more than 1 element");
     }
 
     Token &last = stack.top();
@@ -737,11 +777,14 @@ int main()
     {
         std::string input;
         input = "2+(3*(8-4))";
-        input = "((15 / (7 - (1 + 1))) * 3) - (2 + (1 + 1))";
         input = "sin ( max ( 2, 3 ) / 3 * 3.141592 )";
         input = "3 + 4 * 2 / ( 1 - 5 ) ^ 2 ^ 3";
         input = "3 + ((4 * 2) / (( 1 - 5 ) ^ (2 ^ 3)))";
-        input = "5!";
+        input = "5! +3";
+        input = "((15 / (7 - (1 + 1))) * 3) - (2 + (1 + 1))";
+        input = "5! +3 + pi";
+        input = "pi*2";
+        input = "(tau-pi) * 2";
         
         float res = calc(input);
         
@@ -750,8 +793,10 @@ int main()
 
     } catch (std::runtime_error &e)
     {
-        cout << "[EXCEPTION] " << e.what() << endl;
+        cout << e.what() << endl;
     }
+
+    std::getc(stdin);
 
     return 0;
 }
