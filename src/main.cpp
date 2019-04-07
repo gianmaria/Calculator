@@ -1,5 +1,5 @@
 ﻿#include <iostream> // cout, endl
-#include <string> // string, stof
+#include <string> // string, stof, getline
 #include <vector> // vector
 #include <stack> // stack
 #include <queue> // queue
@@ -12,6 +12,8 @@
 #include <cmath> // NAN, sin, cos
 #include <cctype> // isdigit, isalpha
 
+#define _USE_MATH_DEFINES
+#include <math.h>
 
 using std::cout;
 using std::endl;
@@ -26,9 +28,10 @@ using std::endl;
 
 enum class Token_Type
 {
-    plus, minus, mul, div, pow, mod, fact,
+    plus, minus, mul, div, pow, mod,
     open_parenthesis, close_parenthesis,
-    assignment_op, constant, variable, function, number, comma,
+    assignment_op, constant, variable, function, 
+	number, comma,
     end_of_tokens,
     unknown
 };
@@ -43,7 +46,6 @@ std::string token_type_to_str(Token_Type type)
         case Token_Type::div: return "div";
         case Token_Type::pow: return "pow";
         case Token_Type::mod: return "mod";
-        case Token_Type::fact: return "factorial";
 
         case Token_Type::open_parenthesis: return "open_parenthesis";
         case Token_Type::close_parenthesis: return "close_parenthesis";
@@ -257,7 +259,8 @@ float do_sin(std::stack<float>& operands)
     float op_1 = operands.top();
     operands.pop();
 
-    float res = std::sinf(op_1);
+    float rad = (op_1 * (float)M_PI) / 180.0f;
+    float res = std::sinf(rad);
     
     return res;
 }
@@ -267,7 +270,8 @@ float do_cos(std::stack<float>& operands)
     float op_1 = operands.top();
     operands.pop();
 
-    float res = std::cosf(op_1);
+    float rad = (op_1 * (float)M_PI) / 180.0f;
+    float res = std::cosf(rad);
 
     return res;
 }
@@ -321,17 +325,17 @@ float do_fact(std::stack<float>& operands)
 
 std::map<std::string, token_fn> functions_map =
 {
+    {"fact", do_fact},
     {"sin", do_sin},
     {"cos", do_cos},
-    {"!", do_fact},
     {"max3", do_max3},
     {"max", do_max}
 };
 
 std::map<std::string, float> constants_map = 
 {
-    {"pi",  3.141592f},
-    {"tau", 6.283185f}
+    {"PI",  (float)M_PI},
+    {"TAU", (float)M_PI*2.0f}
 };
 
 // add on operator map?
@@ -459,20 +463,6 @@ Tokenizer tokenize_and_lex(const std::string &input)
                 token.text = ",";
             } break;
 
-            case '!':
-            {
-                token.type = Token_Type::function;
-                token.text = "!";
-                if (auto fn = is_function("!"); fn.has_value())
-                {
-                    token.fn = fn.value();
-                }
-                else
-                {
-                    throw calc_exception("! does not have a function associated!");
-                }
-            } break;
-
             default:
             {
                 if (std::isdigit(c))
@@ -486,7 +476,7 @@ Tokenizer tokenize_and_lex(const std::string &input)
                 }
                 else if (std::isalpha(c))
                 {
-                    // function or variable or constant
+                    // function, variable or constant
                     std::string text = read_string(input.substr(pos));
                     token.text = text;
 
@@ -503,7 +493,8 @@ Tokenizer tokenize_and_lex(const std::string &input)
                     else
                     {
                         // it's a variable // @TODO: handle variables later, maybe?
-                    }
+						throw calc_exception("Unrecognized string: '" + text + "'");
+					}
                 }
                 else
                 {
@@ -519,7 +510,6 @@ Tokenizer tokenize_and_lex(const std::string &input)
 
     Token end;
     end.type = Token_Type::end_of_tokens;
-
     res.tokens.push_back(std::move(end));
 
     return res;
@@ -799,32 +789,26 @@ float calc(const std::string &input)
 
 int main()
 {
-    try
-    {
-        std::string input;
-        input = "2+(3*(8-4))";
-        input = "sin ( max ( 2, 3 ) / 3 * 3.141592 )";
-        input = "3 + 4 * 2 / ( 1 - 5 ) ^ 2 ^ 3";
-        input = "3 + ((4 * 2) / (( 1 - 5 ) ^ (2 ^ 3)))";
-        input = "5! +3";
-        input = "((15 / (7 - (1 + 1))) * 3) - (2 + (1 + 1))";
-        input = "5! +3 + pi";
-        input = "pi*2";
-        input = "(tau-pi) * 2";
-        input = "max3(7, 4+5, 3)";
-        input = "max3(7, max(4,5+3), 3)";
-        
-        float res = calc(input);
-        
-        cout << "> " << input << endl;
-        cout << ": " << std::fixed << res << endl;
+	while (1)
+	{
+		try
+		{
+            cout << "> ";
 
-    } catch (std::runtime_error &e)
-    {
-        cout << e.what() << endl;
-    }
+            std::string expression;
+            std::getline(std::cin, expression);
 
-    std::getc(stdin);
+            if (expression != "")
+            {
+                float res = calc(expression);
+                cout << ": " << std::fixed << res << endl;
+            }
+        
+        } catch (std::runtime_error &e)
+		{
+			cout << e.what() << endl;
+		}
+	}
 
     return 0;
 }
