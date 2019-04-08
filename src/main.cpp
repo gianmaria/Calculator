@@ -789,6 +789,7 @@ float calc(const std::string &input)
 
 int main()
 {
+
 	while (1)
 	{
 		try
@@ -798,7 +799,11 @@ int main()
             std::string expression;
             std::getline(std::cin, expression);
 
-            if (expression != "")
+            if (expression == "exit")
+            {
+                break;
+            }
+            else if (expression != "")
             {
                 float res = calc(expression);
                 cout << ": " << std::fixed << res << endl;
