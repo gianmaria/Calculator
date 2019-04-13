@@ -18,6 +18,15 @@
 using std::cout;
 using std::endl;
 
+/*
+  TODO:
+    - get rid of exception
+    - add ability to log error to file
+    - split main into multiple files
+    - get rid of functions_map and constants_map (?)
+    - remove "token_fn fn;" from token struct
+    - make it more C like (?)
+*/
 
 #define calc_exception(msg) ( \
     std::runtime_error(std::string("[EXCEPTION]") + std::string("\n") + \
@@ -259,7 +268,7 @@ float do_sin(std::stack<float>& operands)
     float op_1 = operands.top();
     operands.pop();
 
-    float rad = (op_1 * (float)M_PI) / 180.0f;
+    float rad = (op_1 * (float)M_PI) / 180.0f; // convert deg to rad
     float res = std::sinf(rad);
     
     return res;
@@ -270,7 +279,7 @@ float do_cos(std::stack<float>& operands)
     float op_1 = operands.top();
     operands.pop();
 
-    float rad = (op_1 * (float)M_PI) / 180.0f;
+    float rad = (op_1 * (float)M_PI) / 180.0f; // convert deg to rad
     float res = std::cosf(rad);
 
     return res;
@@ -338,7 +347,7 @@ std::map<std::string, float> constants_map =
     {"TAU", (float)M_PI*2.0f}
 };
 
-// add on operator map?
+// add on operator map? NO
 
 std::optional<token_fn> is_function(const std::string &text)
 {
@@ -553,11 +562,10 @@ void print_output_queue(std::queue<Token> output_queue)
 std::queue<Token> shunting_yard(Tokenizer &input)
 {
     /*
-    TODOs:
-    we can merge:
-        else if (current_token->type == Token_Type::comma) and
-        else if (current_token->type == Token_Type::close_parenthesis)
-
+      TODOs:
+      we can merge:
+          else if (current_token->type == Token_Type::comma) and
+          else if (current_token->type == Token_Type::close_parenthesis)
     */
     bool debug = true;
 
