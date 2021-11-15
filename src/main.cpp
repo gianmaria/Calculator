@@ -28,12 +28,6 @@ using std::endl;
     - make it more C like (?)
 */
 
-#define calc_exception(msg) ( \
-    std::runtime_error(std::string("[EXCEPTION]") + std::string("\n") + \
-        std::string("File: ") + std::string(__FILE__) + std::string("\n") + \
-        std::string("Function: ") + std::string(__func__) + std::string("():") + std::to_string(__LINE__) + std::string("\n") + \
-        std::string("Msg: ") + std::string(msg)) \
-)
 
 enum class Token_Type
 {
@@ -42,7 +36,7 @@ enum class Token_Type
     assignment_op, constant, variable, function, 
 	number, comma,
     end_of_tokens,
-    unknown
+    not_set
 };
 
 std::string token_type_to_str(Token_Type type)
@@ -68,9 +62,9 @@ std::string token_type_to_str(Token_Type type)
 
         case Token_Type::end_of_tokens: return "end_of_tokens";
 
-        case Token_Type::unknown: return "unknown";
+        case Token_Type::not_set: return "not_set";
 
-        default: throw calc_exception("Name not computed!");
+        default: return "Unknown Token!";
     }
 }
 
@@ -83,7 +77,7 @@ using token_fn = std::function<float(std::stack<float>&)>;
 
 struct Token
 {
-    Token_Type type = Token_Type::unknown;
+    Token_Type type = Token_Type::not_set;
     std::string text = "";
 
     unsigned col = 1;
@@ -144,7 +138,7 @@ struct Tokenizer
     {
         if (old_token_idx != 0)
         {
-            throw calc_exception("Only one save at a time!");
+            // TODO: log error to file
         }
 
         old_token_idx = current_token_idx;
@@ -217,7 +211,7 @@ struct Tokenizer
             std::string error =
                 "Expected " + token_type_to_str(requested) + " found " + token_type_to_str(token->type) +
                 " Col:" + std::to_string(token->col);
-            throw calc_exception(error);
+            // TODO: log error to file
         }
 
         return token;
@@ -502,12 +496,12 @@ Tokenizer tokenize_and_lex(const std::string &input)
                     else
                     {
                         // it's a variable // @TODO: handle variables later, maybe?
-						throw calc_exception("Unrecognized string: '" + text + "'");
+                        // TODO: log error to file
 					}
                 }
                 else
                 {
-                    throw calc_exception("Unrecognized token: '" + std::string(1, c) + "'");
+                    // TODO: log error to file
                 }
             }
         }
@@ -604,7 +598,8 @@ std::queue<Token> shunting_yard(Tokenizer &input)
             }
             if (operator_stack.empty())
             {
-                throw calc_exception("misplaced separator or mismatched parentheses");
+                //throw calc_exception("misplaced separator or mismatched parentheses");
+                // TODO: log error to file
             }
         }
         else if (current_token->is_operator())
@@ -655,13 +650,15 @@ std::queue<Token> shunting_yard(Tokenizer &input)
             }
             else
             {
-                throw calc_exception("Mismatched Parentheses!!");
+                // TODO: log error to file
+                //throw calc_exception("Mismatched Parentheses!!");
             }
         }
         else
         {
-            throw calc_exception("Unexpected token: '" + token_type_to_str(current_token->type) + 
-                                     "' name: '" + current_token->text + "'");
+            // TODO: log error to file
+            //throw calc_exception("Unexpected token: '" + token_type_to_str(current_token->type) + 
+            //                         "' name: '" + current_token->text + "'");
         }
 
         current_token = input.next_token();
@@ -679,7 +676,8 @@ std::queue<Token> shunting_yard(Tokenizer &input)
     {
         if (operator_stack.top().is_parenthesis())
         {
-            throw calc_exception("Mismatched Parentheses!!");
+            // TODO: log error to file
+            //throw calc_exception("Mismatched Parentheses!!");
         }
         else
         {
@@ -750,8 +748,9 @@ float rpn_evaluaton(std::queue<Token> &queue)
                     tmp = std::powf(op_1, op_2);
                 } break;
 
-                default:
-                    throw calc_exception("Found unexpected token during calculation: '" + token.text + "'");
+                //default:
+                    // TODO: log error to file
+                    //throw calc_exception("Found unexpected token during calculation: '" + token.text + "'");
             }
 
             operands.push(tmp);
@@ -768,7 +767,8 @@ float rpn_evaluaton(std::queue<Token> &queue)
         }
         else
         {
-            throw calc_exception("Error in the queue, found: '" + token.text + "'");
+            // TODO: log error to file
+            //throw calc_exception("Error in the queue, found: '" + token.text + "'");
         }
 
         queue.pop();
@@ -776,7 +776,8 @@ float rpn_evaluaton(std::queue<Token> &queue)
 
     if (operands.size() != 1)
     {
-        throw calc_exception("Operand's stack has more than 1 element, something went wrong during the rpn evaluation");
+        // TODO: log error to file
+        //throw calc_exception("Operand's stack has more than 1 element, something went wrong during the rpn evaluation");
     }
 
     float res = operands.top();
@@ -800,27 +801,20 @@ int main()
 
 	while (1)
 	{
-		try
-		{
-            cout << "> ";
+        cout << "> ";
 
-            std::string expression;
-            std::getline(std::cin, expression);
+        std::string expression;
+        std::getline(std::cin, expression);
 
-            if (expression == "exit")
-            {
-                break;
-            }
-            else if (expression != "")
-            {
-                float res = calc(expression);
-                cout << ": " << std::fixed << res << endl;
-            }
-        
-        } catch (std::runtime_error &e)
-		{
-			cout << e.what() << endl;
-		}
+        if (expression == "exit")
+        {
+            break;
+        }
+        else if (expression != "")
+        {
+            float res = calc(expression);
+            cout << ": " << std::fixed << res << endl;
+        }
 	}
 
     return 0;
